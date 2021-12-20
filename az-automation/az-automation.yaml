@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: az-cli
+  name: az-automation
   namespace: demos
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: az-cli
+      app: az-automation
   template:
     metadata:
       labels:
-        app: az-cli
+        app: az-automation
     spec:
       nodeSelector:
         "beta.kubernetes.io/os": linux
       containers:
       - image: mcr.microsoft.com/azure-cli
-        name: az-cli
+        name: az-automation
         resources:
           requests:
             cpu: 100m

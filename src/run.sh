@@ -7,8 +7,8 @@ while true; do
    echo "Running az cli based automation..."
 
    # Your logic here
-   az login --identity
-   az group list
+   az login --identity -o table
+   az group list -o table
 
    echo "Checking again in $UPDATE_FREQUENCY seconds."
    sleep "$UPDATE_FREQUENCY"
