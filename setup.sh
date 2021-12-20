@@ -134,11 +134,14 @@ echo $ingressip
 curl $ingressip
 # -> <html><body>Hello there!</body></html>
 
+# If you now test this you won't get "access_token"
+BODY=$(echo "HTTP GET ""http://169.254.169.254/metadata/identity/oauth2/token?api-version=2021-02-01&resource=https://management.azure.com/"" ""Metadata=true""")
+curl -X POST --data "$BODY" -H "Content-Type: text/plain" "http://$ingressip/api/commands"
+# -> NotFound Not Found no azure identity found for request clientID 
+
 # Create identity to our "webapp-network-tester-demo"
 webappidentityid=$(az identity create --name $aksName-webapp --resource-group $resourceGroupName --query id -o tsv)
-echo $webappidentityid
 webappclientid=$(az identity show --name $aksName-webapp --resource-group $resourceGroupName --query principalId -o tsv)
-echo $webappclientid
 
 # Assign AKS Service contributor role
 az role assignment create --role "Azure Kubernetes Service Contributor Role" --assignee "$webappclientid" --scope $resourcegroupid
@@ -147,7 +150,12 @@ az role assignment create --role "Azure Kubernetes Service Contributor Role" --a
 podidentityname="$aksName-webapp-network-tester-demo"
 echo $podidentityname
 appnamespace="demos"
-az aks pod-identity add --resource-group $resourceGroupName --cluster-name $aksName --namespace $appnamespace --name $podidentityname --identity-resource-id $webappidentityid
+az aks pod-identity add \
+  --resource-group $resourceGroupName \
+  --cluster-name $aksName \
+  --namespace $appnamespace \
+  --name $podidentityname \
+  --identity-resource-id $webappidentityid
 
 # Validate
 az aks pod-identity exception list --resource-group $resourceGroupName --cluster-name $aksName
@@ -157,6 +165,80 @@ BODY=$(echo "HTTP GET ""http://169.254.169.254/metadata/identity/oauth2/token?ap
 curl -X POST --data "$BODY" -H "Content-Type: text/plain" "http://$ingressip/api/commands"
 
 # Copy paste token to https://jwt.ms/ and verify that "xms_mirid" has "$aksName-webapp" as value.
+
+# ##########################################################
+#     _         _                        _   _
+#    / \  _   _| |_ ___  _ __ ___   __ _| |_(_) ___  _ __
+#   / _ \| | | | __/ _ \| '_ ` _ \ / _` | __| |/ _ \| '_ \
+#  / ___ \ |_| | || (_) | | | | | | (_| | |_| | (_) | | | |
+# /_/   \_\__,_|\__\___/|_| |_| |_|\__,_|\__|_|\___/|_| |_|
+# Azure CLI automation demo
+# ##########################################################
+
+# Create identity to our "az-automation"
+automationidentityid=$(az identity create --name $aksName-az-automation --resource-group $resourceGroupName --query id -o tsv)
+automationclientid=$(az identity show --name $aksName-az-automation --resource-group $resourceGroupName --query principalId -o tsv)
+
+# Assign "Reader" role for the resource group of our deployment
+az role assignment create --role "Reader" --assignee "$automationclientid" --scope $resourcegroupid
+
+# Assign this identity to namespace
+automationidentityname="$aksName-automation"
+automationnamespace="az-automation"
+az aks pod-identity add \
+  --resource-group $resourceGroupName \
+  --cluster-name $aksName \
+  --namespace $automationnamespace \
+  --name $automationidentityname \
+  --identity-resource-id $automationidentityid
+
+# Validate
+az aks pod-identity exception list --resource-group $resourceGroupName --cluster-name $aksName
+
+kubectl create namespace az-automation
+
+az acr build --registry $acrName --image az-cli-automation-demo:v1 src/.
+
+cat <<EOF > az-automation.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: az-automation
+  namespace: az-automation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: az-automation
+  template:
+    metadata:
+      labels:
+        app: az-automation
+        # This needs to match your deployment
+        aadpodidbinding: $automationidentityname
+    spec:
+      containers:
+      - image: $acrName.azurecr.io/az-cli-automation-demo:v1
+        name: az-automation
+EOF
+cat az-automation.yaml
+
+kubectl apply -f az-automation.yaml
+
+kubectl get deployment -n az-automation
+kubectl describe deployment -n az-automation
+
+automationpod1=$(kubectl get pod -n az-automation -o name | head -n 1)
+echo $automationpod1
+kubectl logs $automationpod1 -n az-automation
+kubectl exec --stdin --tty $automationpod1 -n az-automation -- /bin/sh
+
+# You can test this even yourself
+az login --identity -o table
+az group list -o table
+
+# Exit container
+exit
 
 # Wipe out the resources
 az group delete --name $resourceGroupName -y
