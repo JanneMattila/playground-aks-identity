@@ -109,7 +109,7 @@ aksid=$(az aks show -g $resourceGroupName -n $aksName --query id -o tsv)
 az role assignment create \
   --role "Azure Kubernetes Service RBAC Cluster Admin" \
   --assignee $aadAdmingGroup \
-  --scope $AKS_ID
+  --scope $aksid
 
 kubectl get nodes
 
@@ -283,6 +283,13 @@ kubectl get clusterrolebinding default-view -o yaml
 
 # Now service account can see namespaces
 kubectl get namespace --token $token1
+
+# But you still can't create namespaces, since you have only "view" rights
+kubectl create namespace demo-identity2 --token $token1
+# Error from server (Forbidden): namespaces is forbidden: 
+# User "system:serviceaccount:demo-identity:default" 
+# cannot create resource "namespaces" in API group "" 
+# at the cluster scope: Azure does not have opinion for this user.
 
 # Wipe out the resources
 az group delete --name $resourceGroupName -y
