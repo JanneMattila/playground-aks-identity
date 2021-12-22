@@ -79,6 +79,7 @@ az aks create -g $resourceGroupName -n $aksName \
  --kubernetes-version 1.21.2 \
  --enable-addons monitoring \
  --enable-aad \
+ --enable-azure-rbac \
  --enable-managed-identity \
  --enable-pod-identity \
  --disable-local-accounts \
@@ -102,6 +103,13 @@ az aks update -g $resourceGroupName -n $aksName --api-server-authorized-ip-range
 sudo az aks install-cli
 
 az aks get-credentials -n $aksName -g $resourceGroupName --overwrite-existing
+
+# If using "--enable-azure-rbac" and you need to grant more access rights:
+aksid=$(az aks show -g $resourceGroupName -n $aksName --query id -o tsv)
+az role assignment create \
+  --role "Azure Kubernetes Service RBAC Cluster Admin" \
+  --assignee $aadAdmingGroup \
+  --scope $AKS_ID
 
 kubectl get nodes
 
@@ -261,6 +269,11 @@ kubectl get namespace --token $token1
 # Error from server (Forbidden): namespaces is forbidden: 
 # User "system:serviceaccount:demo-identity:default" 
 # cannot list resource "namespaces" in API group "" at the cluster scope
+# OR if you have "--enable-azure-rbac"
+# Error from server (Forbidden): namespaces is forbidden: 
+# User "system:serviceaccount:demo-identity:default" 
+# cannot list resource "namespaces" in API group "" at the cluster scope: 
+# Azure does not have opinion for this user.
 
 kubectl create clusterrolebinding default-view \
   --clusterrole=view \
