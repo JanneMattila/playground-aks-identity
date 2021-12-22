@@ -84,7 +84,7 @@ az aks create -g $resourceGroupName -n $aksName \
  --disable-local-accounts \
  --aad-admin-group-object-ids $aadAdmingGroup \
  --workspace-resource-id $workspaceid \
- --attach-acr $acrid \ 
+ --attach-acr $acrid \
  --load-balancer-sku standard \
  --vnet-subnet-id $subnetaksid \
  --assign-identity $identityid \
@@ -239,6 +239,37 @@ az group list -o table
 
 # Exit container
 exit
+
+#####################################
+#  ____                  _
+# / ___|  ___ _ ____   _(_) ___ ___
+# \___ \ / _ \ '__\ \ / / |/ __/ _ \
+#  ___) |  __/ |   \ V /| | (_|  __/
+# |____/ \___|_|    \_/ |_|\___\___|
+# account demos
+#####################################
+kubectl create namespace demo-identity
+kubectl get serviceaccount -n demo-identity
+kubectl describe serviceaccount -n demo-identity
+
+secret1=$(kubectl get secrets -n demo-identity -o name | head -n 1)
+echo $secret1
+token1=$(kubectl get $secret1 -n demo-identity -o jsonpath="{.data.token}" | base64 --decode)
+echo $token1
+
+kubectl get namespace --token $token1
+# Error from server (Forbidden): namespaces is forbidden: 
+# User "system:serviceaccount:demo-identity:default" 
+# cannot list resource "namespaces" in API group "" at the cluster scope
+
+kubectl create clusterrolebinding default-view \
+  --clusterrole=view \
+  --serviceaccount=demo-identity:default
+
+kubectl get clusterrolebinding default-view -o yaml
+
+# Now service account can see namespaces
+kubectl get namespace --token $token1
 
 # Wipe out the resources
 az group delete --name $resourceGroupName -y
