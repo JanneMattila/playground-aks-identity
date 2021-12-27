@@ -252,8 +252,8 @@ az aks create -g $resourceGroupName -n $aksName \
 #    and analyze potentially missing permissions
 #    - You might see request going to "https://graph.windows.net/" to fetch
 #      information about service principal: GET /.../servicePrincipals?$filter=servicePrincipalNames%2Fany...
-#      - Above requires "Azure AD Graph API" permissions, because it tries to fetch
-#    - You can bypass this problem if you add those role as part of Platform team deployment
+#      - Above requires "Azure AD Graph API" permissions, because it tries to fetch information about service principal permissions
+#    - You can bypass this problem if you add those role as part of Platform team deployment as shown above
 
 # List resource groups after deployment
 # (two should be listed, even if there is third resource group in the background: MC_*)
@@ -296,4 +296,5 @@ az login -o table
 az account set --subscription $subscriptionName -o table
 az ad sp delete --id $objectId
 az group delete --name $resourceGroupName -y
+az group delete --name $vnetResourceGroupName -y
 az role definition delete --name $customRoleResourceIdentifier --custom-role-only true
