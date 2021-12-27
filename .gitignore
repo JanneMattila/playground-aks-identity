@@ -349,3 +349,7 @@ MigrationBackup/
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
 az-automation.yaml
+*.zip
+kubelogin
+manifest.json
+custom-aks-team-role.json
