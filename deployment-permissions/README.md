@@ -27,6 +27,27 @@ See [deployment-permissions.sh](deployment-permissions.sh) for actual steps to a
 - Create service principal and grant required permissions for above resource group for deployment
   - Optionally provide similar access to App team users
 
+### Roles summary
+
+AKS control plane identity:
+
+- `Network Contributor` to subnet
+  - Azure CLI uses this to verify that AKS has correct permissions to manage subnet
+
+App team's service principal:
+
+- Custom role to either subnet, vnet or resource group of vnet
+  - `Microsoft.Network/virtualNetworks/subnets/join/action` to be able to join AKS to subnet
+  - `Microsoft.Network/virtualNetworks/subnets/read` to be able to read subnet configuration
+  - `Microsoft.Authorization/*/read` to be able to verify that AKS control plane identity has `Network Contributor` role
+- `Contributor` to their own resource group
+  - To be able to do deployments of different Azure resources
+- `User Access Administrator` to their own resource group
+  - To be able to use Azure RBAC with AKS
+  - To be able to manage ACR permissions
+
+Note: You could combine `Contributor` and `User Access Administrator` to custom role.
+
 ## App team
 
 - Connect to Azure either using your above created service principal or using your own user account

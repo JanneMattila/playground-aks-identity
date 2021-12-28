@@ -32,7 +32,7 @@ subscriptionId=$(az account show -o tsv --query id)
 tenantId=$(az account show -o tsv --query tenantId)
 
 # Create custom role definition for "AKS App team"
-# - Provided subnet join permissions but no other permissions
+# - Provides subnet join permissions
 # https://docs.microsoft.com/en-us/azure/aks/configure-azure-cni#prerequisites
 #
 # Note: You need to evaluate if you need more permissions e.g., private endpoint
@@ -56,7 +56,8 @@ cat <<EOF > custom-aks-team-role.json
     {
       "actions": [
         "Microsoft.Network/virtualNetworks/subnets/join/action",
-        "Microsoft.Network/virtualNetworks/subnets/read"
+        "Microsoft.Network/virtualNetworks/subnets/read",
+        "Microsoft.Authorization/*/read"
       ],
       "dataActions": [],
       "notActions": [],
@@ -70,7 +71,8 @@ cat custom-aks-team-role.json
 # Deploy custom role to our subscription
 customRoleResourceIdentifier=$(az role definition create --role-definition custom-aks-team-role.json --query name -o tsv)
 echo $customRoleResourceIdentifier
-az role definition list --custom-role-only
+az role definition list --custom-role-only true --scope /subscriptions/$subscriptionID
+az role definition list --name $customRoleResourceIdentifier --custom-role-only true --scope /subscriptions/$subscriptionID
 # az role definition delete --name $customRoleResourceIdentifier --custom-role-only true
 
 # Prepare extensions and providers
@@ -151,27 +153,27 @@ echo $subnetaksid
 identityid=$(az identity create --name $identityName --resource-group $resourceGroupName --query id -o tsv)
 echo $identityid
 
-identityobjectid=$(az identity list --resource-group $resourceGroupName --query [].clientId -o tsv)
+identityobjectid=$(az identity list --resource-group $resourceGroupName --query [].principalId -o tsv)
 echo $identityobjectid
 
-# Grant "Network Contributor" or custom role to our custom control plane identity
+# Grant "Network Contributor" our custom control plane identity
 # https://docs.microsoft.com/en-us/azure/aks/configure-azure-cni#prerequisites
-# az role assignment create \
-#   --role "Network Contributor" \
-#   --assignee-object-id $identityobjectid \
-#   --assignee-principal-type ServicePrincipal \
-#   --scope $subnetaksid
 az role assignment create \
-  --role "$customRoleResourceIdentifier" \
+  --role "Network Contributor" \
   --assignee-object-id $identityobjectid \
   --assignee-principal-type ServicePrincipal \
   --scope $subnetaksid
 
-# Grant custom role to our app team
+# Grant custom role to our app team to be able to join subnet
 az role assignment create \
-  --role "$customRoleResourceIdentifier" \
+  --role $customRoleResourceIdentifier \
   --assignee $objectId \
   --scope $vnetResourceGroupId
+
+# List assigned roles
+az role assignment list --assignee $identityobjectid --scope $subnetaksid
+az role assignment list --assignee $objectId -g $vnetResourceGroupName
+az role assignment list --assignee $objectId -g $resourceGroupName
 
 # Provide following details to App team:
 echo $resourceGroupName
@@ -202,7 +204,7 @@ az login \
   -p $clientSecret \
   --tenant $tenantId
 
-# List resource groups (two should be listed)
+# List resource groups (one should be listed)
 az group list -o table
 
 acrid=$(az acr create -l $location -g $resourceGroupName -n $acrName --sku Basic --query id -o tsv)
@@ -214,7 +216,7 @@ echo $workspaceid
 az aks get-versions -l $location -o table
 
 # Note: for public cluster you need to authorize your ip to use api
-myip=$(curl --no-progress-meter https://api.ipify.org)
+myip=$(curl  --no-progress-meter https://api.ipify.org)
 echo $myip
 
 # Note about private clusters:
@@ -254,9 +256,12 @@ az aks create -g $resourceGroupName -n $aksName \
 #      information about service principal: GET /.../servicePrincipals?$filter=servicePrincipalNames%2Fany...
 #      - Above requires "Azure AD Graph API" permissions, because it tries to fetch information about service principal permissions
 #    - You can bypass this problem if you add those role as part of Platform team deployment as shown above
+#      - It does query "Network Contributor" role inside the CLI:
+#        .../roleDefinitions?$filter=roleName%20eq%20%27Network%20Contributor%27
+#
 
 # List resource groups after deployment
-# (two should be listed, even if there is third resource group in the background: MC_*)
+# (one should be still listed, even if there is second resource group in the background: MC_*)
 az group list -o table
 
 ###################################################################
@@ -273,6 +278,7 @@ az aks get-credentials -n $aksName -g $resourceGroupName --overwrite-existing
 
 # Create role assignment for our service principal in order to use kubectl
 aksid=$(az aks show -g $resourceGroupName -n $aksName --query id -o tsv)
+echo $objectId
 az role assignment create \
   --role "Azure Kubernetes Service RBAC Cluster Admin" \
   --assignee-object-id $objectId \
