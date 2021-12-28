@@ -8,6 +8,8 @@
 
 [Baseline architecture for an Azure Kubernetes Service (AKS) cluster](https://docs.microsoft.com/en-us/azure/architecture/reference-architectures/containers/aks/secure-baseline-aks)
 
+![Overall deployment permission diagram](https://user-images.githubusercontent.com/2357647/147555054-b1b8d415-6a4b-429d-abe2-2408cfcbb2df.png)
+
 Here is example how you can try AKS deployments with minimal permissions.
 You can use these steps to test if your permissions are enough or if
 you would like to further customize configuration and permissions based
@@ -47,13 +49,14 @@ App team's service principal:
   - `User Access Administrator` requirement
     - To be able to use Azure RBAC with AKS
     - To be able to manage ACR permissions
+  - Adds capability to further narrow down permissions of the role
 
 ## App team
 
 - Connect to Azure either using your above created service principal or using your own user account
 - Deploy AKS and ACR using Azure CLI
   - Use managed identity created by Platform team for custom control plane identity
-  - Note: after actual cluster deployment there are [two resource groups]](https://docs.microsoft.com/en-us/azure/aks/faq#why-are-two-resource-groups-created-with-aks)
+  - Note: after actual cluster deployment there are [two resource groups](https://docs.microsoft.com/en-us/azure/aks/faq#why-are-two-resource-groups-created-with-aks)
 - Deploy simple container to ACR
 - Deploy workload to AKS using image from ACR
 
