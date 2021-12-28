@@ -353,3 +353,4 @@ az-automation.yaml
 kubelogin
 manifest.json
 custom-aks-team-role.json
+custom-aks-team-network-role.json

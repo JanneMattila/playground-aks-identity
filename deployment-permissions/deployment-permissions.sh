@@ -31,22 +31,23 @@ az account set --subscription $subscriptionName -o table
 subscriptionId=$(az account show -o tsv --query id)
 tenantId=$(az account show -o tsv --query tenantId)
 
-# Create custom role definition for "AKS App team"
+# Create custom role definition for "AKS App team network"
 # - Provides subnet join permissions
 # https://docs.microsoft.com/en-us/azure/aks/configure-azure-cni#prerequisites
 #
 # Note: You need to evaluate if you need more permissions e.g., private endpoint
 # related ones if VNet has additional subnets with additional usage requirements.
 #
-customRoleId="a11594cf-1972-491b-aea6-354e83c04961"
-customRoleName="AKS App team"
+networkCustomRoleId="a11594cf-1972-491b-aea6-354e83c04961"
+networkCustomRoleFullId="/subscriptions/$subscriptionId/providers/Microsoft.Authorization/roleDefinitions/$networkCustomRoleId"
+networkCustomRoleName="AKS App team network"
 customRoleScope="/subscriptions/$subscriptionId"
-cat <<EOF > custom-aks-team-role.json
+cat <<EOF > custom-aks-team-network-role.json
 {
-  "id": "/subscriptions/$subscriptionId/providers/Microsoft.Authorization/roleDefinitions/$customRoleId",
-  "name": "$customRoleId",
-  "roleName": "$customRoleName",
-  "description": "Role for AKS App development teams",
+  "id": "$networkCustomRoleFullId",
+  "name": "$networkCustomRoleId",
+  "roleName": "$networkCustomRoleName",
+  "description": "Role for AKS App development teams to join to subnet",
   "roleType": "CustomRole",
   "type": "Microsoft.Authorization/roleDefinitions",
   "assignableScopes": [
@@ -66,13 +67,59 @@ cat <<EOF > custom-aks-team-role.json
   ]
 }
 EOF
+cat custom-aks-team-network-role.json
+
+# Create custom role definition for "AKS App team"
+# - Combines "Contributor" and "User Access Admistrator" roles to single role
+#
+appTeamCustomRoleId="97a653c0-669f-4a92-b8fd-634857048d87"
+appTeamCustomRoleFullId="/subscriptions/$subscriptionId/providers/Microsoft.Authorization/roleDefinitions/$appTeamCustomRoleId"
+appTeamCustomRoleName="AKS App team"
+customRoleScope="/subscriptions/$subscriptionId"
+cat <<EOF > custom-aks-team-role.json
+{
+  "id": "$appTeamCustomRoleFullId",
+  "name": "$appTeamCustomRoleId",
+  "roleName": "$appTeamCustomRoleName",
+  "description": "Role for AKS App development teams",
+  "roleType": "CustomRole",
+  "type": "Microsoft.Authorization/roleDefinitions",
+  "assignableScopes": [
+    "$customRoleScope"
+  ],
+  "permissions": [
+    {
+      "actions": [
+        "*"
+      ],
+      "dataActions": [],
+      "notActions": [
+        "Microsoft.Authorization/elevateAccess/Action",
+        "Microsoft.Blueprint/blueprintAssignments/write",
+        "Microsoft.Blueprint/blueprintAssignments/delete",
+        "Microsoft.Compute/galleries/share/action"
+      ],
+      "notDataActions": []
+    }
+  ]
+}
+EOF
 cat custom-aks-team-role.json
 
-# Deploy custom role to our subscription
-customRoleResourceIdentifier=$(az role definition create --role-definition custom-aks-team-role.json --query name -o tsv)
-echo $customRoleResourceIdentifier
+# Deploy custom AKS app team network role to our subscription
+networkCustomRoleResourceIdentifier=$(az role definition create --role-definition custom-aks-team-network-role.json --query name -o tsv)
+echo $networkCustomRoleResourceIdentifier
+
+# Deploy custom AKS app team role to our subscription
+appTeamCustomRoleResourceIdentifier=$(az role definition create --role-definition custom-aks-team-role.json --query name -o tsv)
+echo $appTeamCustomRoleResourceIdentifier
+
 az role definition list --custom-role-only true --scope /subscriptions/$subscriptionID
-az role definition list --name $customRoleResourceIdentifier --custom-role-only true --scope /subscriptions/$subscriptionID
+az role definition list --custom-role-only true --scope /subscriptions/$subscriptionID | grep AKS
+az role definition list --name $networkCustomRoleResourceIdentifier
+az role definition list --name $networkCustomRoleResourceIdentifier --custom-role-only true --scope /subscriptions/$subscriptionID
+az role definition list --name $appTeamCustomRoleResourceIdentifier
+az role definition list --name $appTeamCustomRoleResourceIdentifier --custom-role-only true --scope /subscriptions/$subscriptionID
 # az role definition delete --name $customRoleResourceIdentifier --custom-role-only true
 
 # Prepare extensions and providers
@@ -111,10 +158,10 @@ echo $vnetResourceGroupId
 #   - AKS, ACR, Log Analytics workspace, storage account, DBs etc.
 # - We want teams to use automation for creating and deleting their resources
 #
-az role assignment create \
-  --role "Contributor" \
-  --assignee $objectId \
-  --scope $resourceGroupId
+# az role assignment create \
+#   --role "Contributor" \
+#   --assignee $objectId \
+#   --scope $resourceGroupId
 
 # Assign "User Access Administrator" role to service principal into the resource group
 # Why?
@@ -129,8 +176,15 @@ az role assignment create \
 #   pod-managed identities
 #    - Access to databases or storage accounts using Azure RBAC
 #
+# az role assignment create \
+#   --role "User Access Administrator" \
+#   --assignee $objectId \
+#   --scope $resourceGroupId
+
+# Replace above "Contributor" and "User Access Administrator" roles
+# with custom role dedicated for AKS app team scenario
 az role assignment create \
-  --role "User Access Administrator" \
+  --role $appTeamCustomRoleResourceIdentifier \
   --assignee $objectId \
   --scope $resourceGroupId
 
@@ -164,9 +218,9 @@ az role assignment create \
   --assignee-principal-type ServicePrincipal \
   --scope $subnetaksid
 
-# Grant custom role to our app team to be able to join subnet
+# Grant custom network role to our app team to be able to join subnet
 az role assignment create \
-  --role $customRoleResourceIdentifier \
+  --role $networkCustomRoleResourceIdentifier \
   --assignee $objectId \
   --scope $vnetResourceGroupId
 
@@ -212,8 +266,6 @@ echo $acrid
 
 workspaceid=$(az monitor log-analytics workspace create -g $resourceGroupName -n $workspaceName --query id -o tsv)
 echo $workspaceid
-
-az aks get-versions -l $location -o table
 
 # Note: for public cluster you need to authorize your ip to use api
 myip=$(curl  --no-progress-meter https://api.ipify.org)
@@ -264,14 +316,6 @@ az aks create -g $resourceGroupName -n $aksName \
 # (one should be still listed, even if there is second resource group in the background: MC_*)
 az group list -o table
 
-###################################################################
-# Enable current ip
-az aks update -g $resourceGroupName -n $aksName --api-server-authorized-ip-ranges $myip
-
-# Clear all authorized ip ranges
-az aks update -g $resourceGroupName -n $aksName --api-server-authorized-ip-ranges ""
-###################################################################
-
 sudo az aks install-cli
 
 az aks get-credentials -n $aksName -g $resourceGroupName --overwrite-existing
@@ -303,4 +347,5 @@ az account set --subscription $subscriptionName -o table
 az ad sp delete --id $objectId
 az group delete --name $resourceGroupName -y
 az group delete --name $vnetResourceGroupName -y
-az role definition delete --name $customRoleResourceIdentifier --custom-role-only true
+az role definition delete --name $networkCustomRoleResourceIdentifier --custom-role-only true
+az role definition delete --name $appTeamCustomRoleResourceIdentifier --custom-role-only true

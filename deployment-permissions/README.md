@@ -36,17 +36,17 @@ AKS control plane identity:
 
 App team's service principal:
 
-- Custom role to either subnet, vnet or resource group of vnet
+- Custom network role assigned to either subnet, vnet or resource group of vnet
   - `Microsoft.Network/virtualNetworks/subnets/join/action` to be able to join AKS to subnet
   - `Microsoft.Network/virtualNetworks/subnets/read` to be able to read subnet configuration
   - `Microsoft.Authorization/*/read` to be able to verify that AKS control plane identity has `Network Contributor` role
-- `Contributor` to their own resource group
-  - To be able to do deployments of different Azure resources
-- `User Access Administrator` to their own resource group
-  - To be able to use Azure RBAC with AKS
-  - To be able to manage ACR permissions
-
-Note: You could combine `Contributor` and `User Access Administrator` to custom role.
+- Custom role assigned to their own dedicated resource group
+  - Combines `Contributor` and `User Access Administrator`
+  - `Contributor` role requirement
+    - To be able to do deployments of different Azure resources
+  - `User Access Administrator` requirement
+    - To be able to use Azure RBAC with AKS
+    - To be able to manage ACR permissions
 
 ## App team
 
