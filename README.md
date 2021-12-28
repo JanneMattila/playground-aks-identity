@@ -15,4 +15,4 @@ Example how you can test minimal required permissions, if
 you have separate Platform team and App team and you want to
 customize your deployment process.
 
-See [deployment permissions](deployment-permissions/README) for more details.
+See [deployment permissions](./deployment-permissions) for more details.
