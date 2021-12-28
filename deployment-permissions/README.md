@@ -1,13 +1,5 @@
 # Deployment permissions example
 
-[Access and identity options for Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/concepts-identity)
-
-[Identity and access management considerations for AKS](https://docs.microsoft.com/en-us/azure/cloud-adoption-framework/scenarios/aks/eslz-identity-and-access-management)
-
-[Best practices for authentication and authorization in Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/operator-best-practices-identity)
-
-[Baseline architecture for an Azure Kubernetes Service (AKS) cluster](https://docs.microsoft.com/en-us/azure/architecture/reference-architectures/containers/aks/secure-baseline-aks)
-
 ![Overall deployment permission diagram](https://user-images.githubusercontent.com/2357647/147555054-b1b8d415-6a4b-429d-abe2-2408cfcbb2df.png)
 
 Here is example how you can try AKS deployments with minimal permissions.
@@ -69,3 +61,13 @@ Multiple dimensions in above deployment scenario, that impact your overall desig
 - Pre-deployment of different Azure resources by platform team
   - VNETs, route tables, managed identities etc.
 - Use of custom role definitions
+
+## Links
+
+[Access and identity options for Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/concepts-identity)
+
+[Identity and access management considerations for AKS](https://docs.microsoft.com/en-us/azure/cloud-adoption-framework/scenarios/aks/eslz-identity-and-access-management)
+
+[Best practices for authentication and authorization in Azure Kubernetes Service (AKS)](https://docs.microsoft.com/en-us/azure/aks/operator-best-practices-identity)
+
+[Baseline architecture for an Azure Kubernetes Service (AKS) cluster](https://docs.microsoft.com/en-us/azure/architecture/reference-architectures/containers/aks/secure-baseline-aks)
