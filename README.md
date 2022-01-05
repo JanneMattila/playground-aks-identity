@@ -7,7 +7,14 @@ This repository contains identity related examples.
 1. Simple application that shows how you can acquire token inside your pod
 2. Azure CLI based automation that uses managed identity for connecting to Azure
 
-Follow [setup.sh](setup.sh) step-by-step instructions for more details.
+## Usage
+
+1. Clone this repository to your own machine
+2. Open Workspace
+  - Use WSL in Windows
+  - Requires Bash
+3. Open [setup.sh](setup.sh) to walk through steps to deploy this demo environment
+  - Execute different script steps one-by-one (hint: use [shift-enter](https://github.com/JanneMattila/some-questions-and-some-answers/blob/master/q%26a/vs_code.md#automation-tip-shift-enter))
 
 ## Deployment related permissions example
 
