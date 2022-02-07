@@ -284,6 +284,10 @@ kubectl get clusterrolebinding default-view -o yaml
 # Now service account can see namespaces
 kubectl get namespace --token $token1
 
+# "Can I" examples https://kubernetes.io/docs/reference/access-authn-authz/authorization/#checking-api-access
+kubectl auth can-i --help
+kubectl auth can-i get pods -n kube-system --token $token1
+
 # But you still can't create namespaces, since you have only "view" rights
 kubectl create namespace demo-identity2 --token $token1
 # Error from server (Forbidden): namespaces is forbidden: 
