@@ -351,6 +351,7 @@ MigrationBackup/
 az-automation.yaml
 *.zip
 kubelogin
+azwi
 manifest.json
 custom-aks-team-role.json
 custom-aks-team-network-role.json

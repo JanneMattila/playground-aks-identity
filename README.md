@@ -23,3 +23,7 @@ you have separate Platform team and App team and you want to
 customize your deployment process.
 
 See [deployment permissions](./deployment-permissions) for more details.
+
+## Links
+
+[Azure AD Workload Identity](https://github.com/Azure/azure-workload-identity)
