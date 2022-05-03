@@ -77,7 +77,7 @@ az aks create -g $resourceGroupName -n $aksName \
  --node-count 1 --enable-cluster-autoscaler --min-count 1 --max-count 2 \
  --node-osdisk-type "Ephemeral" \
  --node-vm-size "Standard_D8ds_v4" \
- --kubernetes-version 1.21.2 \
+ --kubernetes-version 1.23.5 \
  --enable-addons monitoring \
  --enable-aad \
  --enable-azure-rbac \
@@ -262,11 +262,128 @@ exit
 issuerUrl=$(az aks show -n $aksName -g $resourceGroupName --query "oidcIssuerProfile.issuerUrl" -o tsv)
 echo $issuerUrl
 
+tenantId=$(az account show -s $subscriptionName --query tenantId -o tsv)
+echo $tenantId
+
+# Install Azure AD Workload Identity Mutating Admission Webhook
+helm repo add azure-workload-identity https://azure.github.io/azure-workload-identity/charts
+helm repo update
+helm install workload-identity-webhook azure-workload-identity/workload-identity-webhook \
+   --namespace azure-workload-identity-system \
+   --create-namespace \
+   --set azureTenantID="${tenantId}"
+
 # Download azwi from GitHub Releases
 download=$(curl -sL https://api.github.com/repos/Azure/azure-workload-identity/releases/latest | jq -r '.assets[].browser_download_url' | grep linux-amd64)
 wget $download -O azwi.zip
 tar -xf azwi.zip
 ./azwi --help
+
+# AAD application
+azwiAppName="$aksName-wi-demo"
+echo $azwiAppName
+
+azwiServiceAccount="azwi-sa"
+azwiNamespace="azwi-demo"
+
+# Create an AAD application and grant permissions to access the secret
+./azwi serviceaccount create phase app --aad-application-name "$azwiAppName"
+
+# Create a Kubernetes service account
+kubectl create ns $azwiNamespace
+./azwi serviceaccount create phase sa \
+  --aad-application-name "$azwiAppName" \
+  --service-account-namespace "$azwiNamespace" \
+  --service-account-name "$azwiServiceAccount"
+
+# Check namespace content
+kubectl get serviceaccount -n $azwiNamespace
+
+# Establish federated identity credential between the AAD application and the service account issuer & subject
+./azwi serviceaccount create phase federated-identity \
+  --aad-application-name "$azwiAppName" \
+  --service-account-namespace "$azwiNamespace" \
+  --service-account-name "$azwiServiceAccount" \
+  --service-account-issuer-url "$issuerUrl"
+
+# Deploy workload
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: az-cli
+  namespace: ${azwiNamespace}
+spec:
+  serviceAccountName: ${azwiServiceAccount}
+  containers:
+    - image: mcr.microsoft.com/azure-cli:2.35.0
+      name: oidc
+      command: ["/bin/sh"]
+      args: ["-c", "while true; do echo Waiting; sleep 10;done"]
+  nodeSelector:
+    kubernetes.io/os: linux
+EOF
+
+kubectl get pod -n $azwiNamespace
+kubectl describe pod -n $azwiNamespace
+# Note environment variables and mounts
+
+azwipod=$(kubectl get pod -n $azwiNamespace -o name | head -n 1)
+echo $azwipod
+kubectl logs $azwipod -n $azwiNamespace
+kubectl exec --stdin --tty $azwipod -n $azwiNamespace -- /bin/bash
+
+echo $AZURE_CLIENT_ID
+echo $AZURE_TENANT_ID
+echo $AZURE_FEDERATED_TOKEN_FILE
+echo $AZURE_AUTHORITY_HOST
+cat $AZURE_FEDERATED_TOKEN_FILE
+# Output:
+# -------
+# {
+#   "aud": [
+#     "api://AzureADTokenExchange"
+#   ],
+#   "exp": 1651580447,
+#   "iat": 1651576847,
+#   "iss": "https://oidc.prod-aks.azure.com/291168e9-1ded-42d8-8608-c9ff8fe7c21b/",
+#   "kubernetes.io": {
+#     "namespace": "azwi-demo",
+#     "pod": {
+#       "name": "az-cli",
+#       "uid": "1708aba8-6ffc-47cc-97aa-1b38bdadf8b7"
+#     },
+#     "serviceaccount": {
+#       "name": "azwi-sa",
+#       "uid": "f6d4c1a6-b507-49c1-9e68-8dae67047cd7"
+#     }
+#   },
+#   "nbf": 1651576847,
+#   "sub": "system:serviceaccount:azwi-demo:azwi-sa"
+# }
+
+ls /var/run/secrets/kubernetes.io/serviceaccount
+cat /var/run/secrets/kubernetes.io/serviceaccount/token
+
+# Login using federated token
+az login --allow-no-subscriptions --service-principal -u $AZURE_CLIENT_ID -t $AZURE_TENANT_ID --federated-token $(cat $AZURE_FEDERATED_TOKEN_FILE) 
+
+# Continue automations based on granted access rights etc.
+# graphAccessToken=$(az account get-access-token --resource https://graph.microsoft.com/ -o tsv --query accessToken)
+# curl -s -H "Authorization: Bearer $graphAccessToken" "https://graph.microsoft.com/v1.0"
+
+# Exit az-cli container
+exit
+
+# Delete az wi demo
+kubectl delete pod az-cli -n "$azwiNamespace"
+kubectl delete sa "$azwiServiceAccount" --namespace "$azwiNamespace"
+
+azwiClientId="$(az ad sp list --display-name "$azwiAppName" --query '[0].appId' -otsv)"
+echo $azwiClientId
+
+# Remove Azure AD app
+az ad sp delete --id "$azwiClientId"
 
 #####################################
 #  ____                  _
