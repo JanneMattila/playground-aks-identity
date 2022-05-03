@@ -17,7 +17,6 @@ location="westeurope"
 az login -o table
 az account set --subscription $subscriptionName -o table
 
-subscriptionID=$(az account show -o tsv --query id)
 resourcegroupid=$(az group create -l $location -n $resourceGroupName -o table --query id -o tsv)
 echo $resourcegroupid
 
@@ -25,9 +24,11 @@ echo $resourcegroupid
 az extension add --upgrade --yes --name aks-preview
 
 # Enable features
+az feature register --namespace "Microsoft.ContainerService" --name "EnableOIDCIssuerPreview"
 az feature register --namespace "Microsoft.ContainerService" --name "EnablePodIdentityPreview"
 az feature register --namespace "Microsoft.ContainerService" --name "AKS-ScaleDownModePreview"
 az feature register --namespace "Microsoft.ContainerService" --name "PodSubnetPreview"
+az feature list -o table --query "[?contains(name, 'Microsoft.ContainerService/EnableOIDCIssuerPreview')].{Name:name,State:properties.state}"
 az feature list -o table --query "[?contains(name, 'Microsoft.ContainerService/EnablePodIdentityPreview')].{Name:name,State:properties.state}"
 az feature list -o table --query "[?contains(name, 'Microsoft.ContainerService/AKS-ScaleDownModePreview')].{Name:name,State:properties.state}"
 az feature list -o table --query "[?contains(name, 'Microsoft.ContainerService/PodSubnetPreview')].{Name:name,State:properties.state}"
@@ -61,7 +62,7 @@ echo $identityid
 az aks get-versions -l $location -o table
 
 # Note: for public cluster you need to authorize your ip to use api
-myip=$(curl --no-progress-meter https://api.ipify.org)
+myip=$(curl -s https://api.ipify.org)
 echo $myip
 
 # Note about private clusters:
@@ -80,9 +81,9 @@ az aks create -g $resourceGroupName -n $aksName \
  --enable-addons monitoring \
  --enable-aad \
  --enable-azure-rbac \
- --enable-managed-identity \
  --enable-pod-identity \
  --disable-local-accounts \
+ --enable-oidc-issuer \
  --aad-admin-group-object-ids $aadAdmingGroup \
  --workspace-resource-id $workspaceid \
  --attach-acr $acrid \
@@ -247,6 +248,25 @@ az group list -o table
 
 # Exit container
 exit
+
+#############################
+#   ___  ___  ____    ____
+#  / _ \|_ _||  _ \  / ___|
+# | | | || | | | | || |
+# | |_| || | | |_| || |___
+#  \___/|___||____/  \____|
+# Issuer & Azure AD Workload
+#          Identity
+#############################
+
+issuerUrl=$(az aks show -n $aksName -g $resourceGroupName --query "oidcIssuerProfile.issuerUrl" -o tsv)
+echo $issuerUrl
+
+# Download azwi from GitHub Releases
+download=$(curl -sL https://api.github.com/repos/Azure/azure-workload-identity/releases/latest | jq -r '.assets[].browser_download_url' | grep linux-amd64)
+wget $download -O azwi.zip
+tar -xf azwi.zip
+./azwi --help
 
 #####################################
 #  ____                  _
