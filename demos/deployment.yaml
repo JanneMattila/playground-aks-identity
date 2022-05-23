@@ -16,7 +16,7 @@ spec:
         aadpodidbinding: myaksidentity-webapp-network-tester-demo
     spec:
       nodeSelector:
-        "beta.kubernetes.io/os": linux
+        kubernetes.io/os: linux
       containers:
       - image: jannemattila/webapp-network-tester:1.0.41
         imagePullPolicy: Always

@@ -175,6 +175,66 @@ curl -X POST --data "$BODY" -H "Content-Type: text/plain" "http://$ingressip/api
 
 # Copy paste token to https://jwt.ms/ and verify that "xms_mirid" has "$aksName-webapp" as value.
 
+###############################
+#  ____   ____     _     ____
+# |  _ \ | __ )   / \   / ___|
+# | |_) ||  _ \  / _ \ | |
+# |  _ < | |_) |/ ___ \| |___
+# |_| \_\|____//_/   \_\\____|
+# Azure RBAC for Kubernetes
+###############################
+#region Azure RBAC for Kubernetes
+
+# Create namespace for out "team1"
+kubectl create ns team1-ns
+
+exampleUser="aksuser@contoso.com"
+
+aksid=$(az aks show -g $resourceGroupName -n $aksName --query id -o tsv)
+
+# Grant access to fetch kubeconfig for cluserUser role
+# https://docs.microsoft.com/en-us/azure/aks/control-kubeconfig-access#available-cluster-roles-permissions
+az role assignment create \
+  --role "Azure Kubernetes Service Cluster User Role" \
+  --assignee $exampleUser \
+  --scope $aksid
+
+# Grant write access to that namespace
+az role assignment create \
+  --role "Azure Kubernetes Service RBAC Writer" \
+  --assignee $exampleUser \
+  --scope "$aksid/namespaces/team1-ns"
+
+# Login as $exampleUser
+az login -o table
+az account set --subscription $subscriptionName -o table
+
+az aks get-credentials -n $aksName -g $resourceGroupName --overwrite-existing
+
+# List kubeconfig
+cat ~/.kube/config
+
+kubectl get ns
+# -> Error from server (Forbidden): namespaces is forbidden
+
+kubectl get ns team1-ns
+# NAME       STATUS   AGE
+# team1-ns   Active   6m7s
+
+kubectl create deployment app-deployment --image "jannemattila/webapp-network-tester" --replicas 1 -n team1-ns
+kubectl get all -n team1-ns
+
+kubectl create ns team1-another-ns
+# -> Error
+
+kubectl auth can-i get pods -n kube-system
+# no - User does not have access to the resource in Azure. Update role assignment to allow access.
+
+kubectl auth can-i get pods -n team1-ns
+# yes
+
+#endregion
+
 # ##########################################################
 #     _         _                        _   _
 #    / \  _   _| |_ ___  _ __ ___   __ _| |_(_) ___  _ __
@@ -183,6 +243,7 @@ curl -X POST --data "$BODY" -H "Content-Type: text/plain" "http://$ingressip/api
 # /_/   \_\__,_|\__\___/|_| |_| |_|\__,_|\__|_|\___/|_| |_|
 # Azure CLI automation demo
 # ##########################################################
+#region Azure CLI Automation demo
 
 # Create identity to our "az-automation"
 automationidentityid=$(az identity create --name $aksName-az-automation --resource-group $resourceGroupName --query id -o tsv)
@@ -249,6 +310,8 @@ az group list -o table
 # Exit container
 exit
 
+#endregion
+
 #############################
 #   ___  ___  ____    ____
 #  / _ \|_ _||  _ \  / ___|
@@ -258,7 +321,7 @@ exit
 # Issuer & Azure AD Workload
 #          Identity
 #############################
-
+#region OIDC Issuer & Azure AD Workload Identity
 issuerUrl=$(az aks show -n $aksName -g $resourceGroupName --query "oidcIssuerProfile.issuerUrl" -o tsv)
 echo $issuerUrl
 
@@ -384,6 +447,7 @@ echo $azwiClientId
 
 # Remove Azure AD app
 az ad sp delete --id "$azwiClientId"
+#endregion
 
 #####################################
 #  ____                  _
@@ -393,6 +457,7 @@ az ad sp delete --id "$azwiClientId"
 # |____/ \___|_|    \_/ |_|\___\___|
 # account demos
 #####################################
+#region Service account demos
 kubectl create namespace demo-identity
 kubectl get serviceaccount -n demo-identity
 kubectl describe serviceaccount -n demo-identity
@@ -431,6 +496,8 @@ kubectl create namespace demo-identity2 --token $token1
 # User "system:serviceaccount:demo-identity:default" 
 # cannot create resource "namespaces" in API group "" 
 # at the cluster scope: Azure does not have opinion for this user.
+
+#endregion
 
 # Wipe out the resources
 az group delete --name $resourceGroupName -y

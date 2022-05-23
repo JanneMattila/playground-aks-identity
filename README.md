@@ -26,4 +26,10 @@ See [deployment permissions](./deployment-permissions) for more details.
 
 ## Links
 
-[Azure AD Workload Identity](https://github.com/Azure/azure-workload-identity)
+- [Azure AD integration](https://docs.microsoft.com/en-us/azure/aks/concepts-identity#azure-ad-integration)
+  - [Available cluster roles permissions](https://docs.microsoft.com/en-us/azure/aks/control-kubeconfig-access#available-cluster-roles-permissions)
+- [Azure RBAC for Kubernetes Authorization](https://docs.microsoft.com/en-us/azure/aks/concepts-identity#azure-rbac-for-kubernetes-authorization)
+  - [Use Azure RBAC for Kubernetes Authorization](https://docs.microsoft.com/en-us/azure/aks/manage-azure-rbac)
+- [Kubernetes RBAC](https://docs.microsoft.com/en-us/azure/aks/concepts-identity#kubernetes-rbac)
+  - [Use Kubernetes RBAC with Azure AD integration](https://docs.microsoft.com/en-us/azure/aks/azure-ad-rbac)
+- [Azure AD Workload Identity](https://github.com/Azure/azure-workload-identity)
