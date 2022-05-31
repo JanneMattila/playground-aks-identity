@@ -1,24 +1,26 @@
 #!/bin/bash
 
+# Enable auto export
+set -a
+
 # All the variables for the deployment
 subscriptionName="AzureDev"
 aadAdminGroupContains="janne''s"
 
 aksName="myaksidentity"
 acrName="myacridentity0000010"
+keyvaultName="myacridentity0000010"
 workspaceName="myidentityworkspace"
 vnetName="myidentity-vnet"
 subnetAks="AksSubnet"
-identityName="myaksidentity"
+clusterIdentityName="myaksclusteridentity"
+kubeletIdentityName="myakskubeletidentity"
 resourceGroupName="rg-myaksidentity"
 location="westeurope"
 
 # Login and set correct context
 az login -o table
 az account set --subscription $subscriptionName -o table
-
-resourcegroupid=$(az group create -l $location -n $resourceGroupName -o table --query id -o tsv)
-echo $resourcegroupid
 
 # Prepare extensions and providers
 az extension add --upgrade --yes --name aks-preview
@@ -37,10 +39,13 @@ az provider register --namespace Microsoft.ContainerService
 # Remove extension in case conflicting previews
 # az extension remove --name aks-preview
 
+resourcegroupid=$(az group create -l $location -n $resourceGroupName -o table --query id -o tsv)
+echo $resourcegroupid
+
 acrid=$(az acr create -l $location -g $resourceGroupName -n $acrName --sku Basic --query id -o tsv)
 echo $acrid
 
-aadAdmingGroup=$(az ad group list --display-name $aadAdminGroupContains --query [].objectId -o tsv)
+aadAdmingGroup=$(az ad group list --display-name $aadAdminGroupContains --query [].id -o tsv)
 echo $aadAdmingGroup
 
 workspaceid=$(az monitor log-analytics workspace create -g $resourceGroupName -n $workspaceName --query id -o tsv)
@@ -56,8 +61,24 @@ subnetaksid=$(az network vnet subnet create -g $resourceGroupName --vnet-name $v
   --query id -o tsv)
 echo $subnetaksid
 
-identityid=$(az identity create --name $identityName --resource-group $resourceGroupName --query id -o tsv)
-echo $identityid
+# Create cluster identity
+# https://docs.microsoft.com/en-us/azure/aks/use-managed-identity#summary-of-managed-identities
+clusterIdentityJson=$(az identity create --name $clusterIdentityName --resource-group $resourceGroupName -o json)
+clusterIdentityid=$(echo $clusterIdentityJson | jq -r .id)
+clusterIdentityclientid=$(echo $clusterIdentityJson | jq -r .clientId)
+clusterIdentityobjectid=$(echo $clusterIdentityJson | jq -r .principalId)
+echo $clusterIdentityid
+echo $clusterIdentityclientid
+echo $clusterIdentityobjectid
+
+# Create kubelet identity
+kubeletIdentityJson=$(az identity create --name $kubeletIdentityName --resource-group $resourceGroupName -o json)
+kubeletIdentityid=$(echo $kubeletIdentityJson | jq -r .id)
+kubeletIdentityclientid=$(echo $kubeletIdentityJson | jq -r .clientId)
+kubeletIdentityobjectid=$(echo $kubeletIdentityJson | jq -r .principalId)
+echo $kubeletIdentityid
+echo $kubeletIdentityclientid
+echo $kubeletIdentityobjectid
 
 az aks get-versions -l $location -o table
 
@@ -78,7 +99,7 @@ az aks create -g $resourceGroupName -n $aksName \
  --node-osdisk-type "Ephemeral" \
  --node-vm-size "Standard_D8ds_v4" \
  --kubernetes-version 1.23.5 \
- --enable-addons monitoring \
+ --enable-addons monitoring,azure-keyvault-secrets-provider \
  --enable-aad \
  --enable-azure-rbac \
  --enable-pod-identity \
@@ -89,7 +110,8 @@ az aks create -g $resourceGroupName -n $aksName \
  --attach-acr $acrid \
  --load-balancer-sku standard \
  --vnet-subnet-id $subnetaksid \
- --assign-identity $identityid \
+ --assign-identity $clusterIdentityid \
+ --assign-kubelet-identity $kubeletIdentityid \
  --api-server-authorized-ip-ranges $myip \
  -o table
 
@@ -122,11 +144,10 @@ kubectl get nodes
 # |_| \_|\___|\__| \_/\_/ \___/|_|  |_|\_\
 # Tester web app demo
 ############################################
+#region Base setup demo
 
 # Deploy all items from demos namespace
-kubectl apply -f demos/namespace.yaml
-kubectl apply -f demos/deployment.yaml
-kubectl apply -f demos/service.yaml
+kubectl apply -f demos/
 
 kubectl get deployment -n demos
 kubectl describe deployment -n demos
@@ -174,6 +195,7 @@ BODY=$(echo "HTTP GET ""http://169.254.169.254/metadata/identity/oauth2/token?ap
 curl -X POST --data "$BODY" -H "Content-Type: text/plain" "http://$ingressip/api/commands"
 
 # Copy paste token to https://jwt.ms/ and verify that "xms_mirid" has "$aksName-webapp" as value.
+#endregion
 
 ###############################
 #  ____   ____     _     ____
@@ -499,5 +521,115 @@ kubectl create namespace demo-identity2 --token $token1
 
 #endregion
 
+#############################################
+#  _  __           __     __          _ _
+# | |/ /___ _   _  \ \   / /_ _ _   _| | |_
+# | ' // _ \ | | |  \ \ / / _` | | | | | __|
+# | . \  __/ |_| |   \ V / (_| | |_| | | |_
+# |_|\_\___|\__, |    \_/ \__,_|\__,_|_|\__|
+#           |___/
+# and secret demos
+#############################################
+#region Key Vault demos
+
+# Verify the Azure Key Vault Provider for Secrets Store CSI Driver installation
+kubectl get pods -n kube-system -l "app in (secrets-store-csi-driver, secrets-store-provider-azure)"
+# NAME                                     READY   STATUS    RESTARTS      AGE
+# aks-secrets-store-csi-driver-nj7sm       3/3     Running   2 (11m ago)   11m
+# aks-secrets-store-provider-azure-9jtpl   1/1     Running   0             11m
+
+# You can configure polling frequency
+# az aks update -g $resourceGroupName -n $aksName --enable-secret-rotation --rotation-poll-interval 5m
+
+# Either configure Pod identity or disable it for this app or disable it completely
+# az aks update -g $resourceGroupName -n $aksName --disable-pod-identity
+
+# Create Key vault
+keyvaultjson=$(az keyvault create \
+  --name $keyvaultName \
+  --resource-group $resourceGroupName \
+  --enable-rbac-authorization true \
+  --location $location -o json)
+keyvaultid=$(echo $keyvaultjson | jq -r .id)
+keyvault=$(echo $keyvaultjson | jq -r .properties.vaultUri)
+echo $keyvaultid
+echo $keyvault
+
+# Get current account context
+accountJson=$(az account show -o json)
+tenantID=$(echo $accountJson | jq -r .tenantId)
+
+# Grant permissions for current user to be able manage
+# all Key Vault content
+me=$(echo $accountJson | jq -r .user.name)
+echo $me
+az role assignment create \
+  --role "Key Vault Administrator" \
+  --assignee $me \
+  --scope $keyvaultid
+
+# Grant "Key Vault Administrator" for our kubelet managed identity
+# https://docs.microsoft.com/en-us/azure/key-vault/general/rbac-guide
+az role assignment create \
+  --role "Key Vault Administrator" \
+  --assignee-object-id $kubeletIdentityobjectid \
+  --assignee-principal-type ServicePrincipal \
+  --scope $keyvaultid
+
+# Store application configuration values to the Key Vault
+secretvar1=$(openssl rand -base64 32)
+secretvar2=$(openssl rand -base64 32)
+echo $secretvar1
+echo $secretvar2
+
+az keyvault secret set --name "secretvar1" --value $secretvar1 --vault-name $keyvaultName
+az keyvault secret set --name "secretvar2" --value $secretvar2 --vault-name $keyvaultName
+
+# Deploy secrets demo app
+kubectl apply -f secrets/00_namespace.yaml
+kubectl apply -f secrets/01_aadpodexception.yaml
+kubectl apply -f secrets/02_service.yaml
+cat secrets/03_secretprovider-volume.yaml | envsubst | kubectl apply -f -
+kubectl apply -f secrets/04_secret.yaml
+cat secrets/05_secretprovider-secret.yaml | envsubst | kubectl apply -f -
+kubectl apply -f secrets/06_deployment.yaml
+kubectl apply -f secrets/06_deployment.yaml
+
+kubectl get deployment -n secrets
+kubectl describe deployment -n secrets
+kubectl get pods -n secrets
+kubectl describe pods -n secrets
+kubectl get svc -n secrets
+kubectl get secrets -n secrets
+kubectl describe secrets -n secrets
+
+kubectl get SecretProviderClass -n secrets -o wide
+kubectl describe SecretProviderClass -n secrets
+
+secretsip=$(kubectl get service -n secrets -o jsonpath="{.items[0].status.loadBalancer.ingress[0].ip}")
+echo $secretsip
+
+# Get information about currently running application
+curl $secretsip/api/update
+
+# Connect to pod and check the file system content
+secretspod=$(kubectl get pod -n secrets -o name | head -n 1)
+echo $secretspod
+kubectl exec --stdin --tty $secretspod -n secrets -- /bin/sh
+
+ls /mnt/secrets
+cat /mnt/secrets/secretvar1
+env
+echo $SECRET_VAR2
+
+# Exit container
+exit
+
+# Rotate key and observe restart in ~5 minutes timeframe
+az keyvault secret set --name "secretvar2" --value "Updated value!" --vault-name $keyvaultName
+
+#endregion
+
 # Wipe out the resources
 az group delete --name $resourceGroupName -y
+az keyvault purge --name $keyvaultName # Otherwise it will be in "Deleted vaults" but name is reserved
