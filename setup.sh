@@ -640,6 +640,11 @@ cat /mnt/secretsenv/secretvar2
 env
 echo $SECRET_VAR2
 
+# Note related limitations for environment vars!
+# https://secrets-store-csi-driver.sigs.k8s.io/known-limitations.html
+# https://secrets-store-csi-driver.sigs.k8s.io/topics/secret-auto-rotation.html
+# -> https://github.com/stakater/Reloader
+
 # Exit container
 exit
 
