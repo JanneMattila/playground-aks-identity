@@ -614,6 +614,9 @@ kubectl get svc -n secrets
 kubectl get secrets -n secrets
 kubectl describe secrets -n secrets
 
+# Get value of the secret
+kubectl get secrets keyvault -n secrets --template={{.data.secretvar2}} | base64 -d
+
 kubectl get SecretProviderClass -n secrets -o wide
 kubectl describe SecretProviderClass -n secrets
 
