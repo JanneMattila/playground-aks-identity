@@ -112,6 +112,7 @@ az aks create -g $resourceGroupName -n $aksName \
  --vnet-subnet-id $subnetaksid \
  --assign-identity $clusterIdentityid \
  --assign-kubelet-identity $kubeletIdentityid \
+ --enable-secret-rotation \
  --api-server-authorized-ip-ranges $myip \
  -o table
 
@@ -539,7 +540,7 @@ kubectl get pods -n kube-system -l "app in (secrets-store-csi-driver, secrets-st
 # aks-secrets-store-provider-azure-9jtpl   1/1     Running   0             11m
 
 # You can configure polling frequency
-# az aks update -g $resourceGroupName -n $aksName --enable-secret-rotation --rotation-poll-interval 5m
+az aks update -g $resourceGroupName -n $aksName --enable-secret-rotation --rotation-poll-interval 5m
 
 # Either configure Pod identity or disable it for this app or disable it completely
 # az aks update -g $resourceGroupName -n $aksName --disable-pod-identity
@@ -590,15 +591,25 @@ kubectl apply -f secrets/00_namespace.yaml
 kubectl apply -f secrets/01_aadpodexception.yaml
 kubectl apply -f secrets/02_service.yaml
 cat secrets/03_secretprovider-volume.yaml | envsubst | kubectl apply -f -
-kubectl apply -f secrets/04_secret.yaml
 cat secrets/05_secretprovider-secret.yaml | envsubst | kubectl apply -f -
-kubectl apply -f secrets/06_deployment.yaml
 kubectl apply -f secrets/06_deployment.yaml
 
 kubectl get deployment -n secrets
 kubectl describe deployment -n secrets
 kubectl get pods -n secrets
 kubectl describe pods -n secrets
+# Example output:
+# ...
+# Events:
+#   Type    Reason                  Age                  From                        Message
+#   ----    ------                  ----                 ----                        -------
+#   Normal  Scheduled               7m56s                default-scheduler           Successfully assigned secrets/webapp-secrets-demo-64555569-r5fwk to aks-nodepool1-28886745-vmss000000
+#   Normal  Pulled                  7m55s                kubelet                     Container image "jannemattila/webapp-update:1.0.9" already present on machine
+#   Normal  Created                 7m55s                kubelet                     Created container webapp-secrets-demo
+#   Normal  Started                 7m55s                kubelet                     Started container webapp-secrets-demo
+#   Normal  SecretRotationComplete  75s (x2 over 6m15s)  csi-secrets-store-rotation  successfully rotated K8s secret keyvault
+#   Normal  MountRotationComplete   75s                  csi-secrets-store-rotation  successfully rotated mounted contents for spc secrets/secretprovider-keyvault-webapp-secrets-demo
+
 kubectl get svc -n secrets
 kubectl get secrets -n secrets
 kubectl describe secrets -n secrets
@@ -617,8 +628,12 @@ secretspod=$(kubectl get pod -n secrets -o name | head -n 1)
 echo $secretspod
 kubectl exec --stdin --tty $secretspod -n secrets -- /bin/sh
 
-ls /mnt/secrets
-cat /mnt/secrets/secretvar1
+ls /mnt/secretsvolume
+ls /mnt/secretsenv
+
+cat /mnt/secretsvolume/secretvar1
+cat /mnt/secretsenv/secretvar2
+
 env
 echo $SECRET_VAR2
 
