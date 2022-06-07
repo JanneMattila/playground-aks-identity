@@ -189,7 +189,7 @@ az role assignment create \
   --scope $resourceGroupId
 
 # Provide Azure AD group for app team for easier cluster access management
-aadAdmingGroupObjectId=$(az ad group list --display-name $aadAdminGroupContains --query [].objectId -o tsv)
+aadAdmingGroupObjectId=$(az ad group list --display-name $aadAdminGroupContains --query [].id -o tsv)
 echo $aadAdmingGroupObjectId
 
 # Create VNET for our cluster to use
