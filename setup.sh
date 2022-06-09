@@ -657,7 +657,7 @@ echo $SECRET_VAR2
 # Exit container
 exit
 
-# Rotate key and observe restart in ~5 minutes timeframe
+# Rotate key and observe changes in ~5 minutes timeframe
 az keyvault secret set --name "secretvar2" --value "Updated value!" --vault-name $keyvaultName
 
 #endregion
