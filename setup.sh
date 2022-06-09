@@ -125,6 +125,7 @@ az aks update -g $resourceGroupName -n $aksName --api-server-authorized-ip-range
 ###################################################################
 
 sudo az aks install-cli
+kubelogin convert-kubeconfig
 
 az aks get-credentials -n $aksName -g $resourceGroupName --overwrite-existing
 
@@ -586,13 +587,16 @@ echo $secretvar2
 az keyvault secret set --name "secretvar1" --value $secretvar1 --vault-name $keyvaultName
 az keyvault secret set --name "secretvar2" --value $secretvar2 --vault-name $keyvaultName
 
+az keyvault secret set --name "secretvar3" --file /usr/bin/uptime --encoding base64 --vault-name $keyvaultName
+sha256sum /usr/bin/uptime
+
 # Deploy secrets demo app
 kubectl apply -f secrets/00_namespace.yaml
 kubectl apply -f secrets/01_aadpodexception.yaml
 kubectl apply -f secrets/02_service.yaml
 cat secrets/03_secretprovider-volume.yaml | envsubst | kubectl apply -f -
-cat secrets/05_secretprovider-secret.yaml | envsubst | kubectl apply -f -
-kubectl apply -f secrets/06_deployment.yaml
+cat secrets/04_secretprovider-secret.yaml | envsubst | kubectl apply -f -
+kubectl apply -f secrets/05_deployment.yaml
 
 kubectl get deployment -n secrets
 kubectl describe deployment -n secrets
@@ -635,7 +639,12 @@ ls /mnt/secretsvolume
 ls /mnt/secretsenv
 
 cat /mnt/secretsvolume/secretvar1
+cat /mnt/secretsvolume/secretvar3
 cat /mnt/secretsenv/secretvar2
+
+# Convert base64 to file
+cat /mnt/secretsvolume/secretvar3 | base64 -d > uptime
+sha256sum /app/uptime
 
 env
 echo $SECRET_VAR2
