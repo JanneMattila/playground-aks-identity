@@ -126,7 +126,7 @@ az aks update -g $resourceGroupName -n $aksName --api-server-authorized-ip-range
 
 sudo az aks install-cli
 az aks get-credentials -n $aksName -g $resourceGroupName --overwrite-existing
-kubelogin convert-kubeconfig
+kubelogin convert-kubeconfig -l azurecli
 
 # If using "--enable-azure-rbac" and you need to grant more access rights:
 aksid=$(az aks show -g $resourceGroupName -n $aksName --query id -o tsv)
