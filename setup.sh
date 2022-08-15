@@ -98,7 +98,7 @@ az aks create -g $resourceGroupName -n $aksName \
  --node-count 1 --enable-cluster-autoscaler --min-count 1 --max-count 2 \
  --node-osdisk-type "Ephemeral" \
  --node-vm-size "Standard_D8ds_v4" \
- --kubernetes-version 1.23.5 \
+ --kubernetes-version 1.23.8 \
  --enable-addons monitoring,azure-keyvault-secrets-provider \
  --enable-aad \
  --enable-azure-rbac \
@@ -362,8 +362,9 @@ helm install workload-identity-webhook azure-workload-identity/workload-identity
 # Download azwi from GitHub Releases
 download=$(curl -sL https://api.github.com/repos/Azure/azure-workload-identity/releases/latest | jq -r '.assets[].browser_download_url' | grep linux-amd64)
 wget $download -O azwi.zip
-tar -xf azwi.zip
+tar -xf azwi.zip --exclude=*.md --exclude=LICENSE
 ./azwi --help
+./azwi version
 
 # AAD application
 azwiAppName="$aksName-wi-demo"
@@ -455,8 +456,10 @@ cat /var/run/secrets/kubernetes.io/serviceaccount/token
 az login --allow-no-subscriptions --service-principal -u $AZURE_CLIENT_ID -t $AZURE_TENANT_ID --federated-token $(cat $AZURE_FEDERATED_TOKEN_FILE) 
 
 # Continue automations based on granted access rights etc.
-# graphAccessToken=$(az account get-access-token --resource https://graph.microsoft.com/ -o tsv --query accessToken)
-# curl -s -H "Authorization: Bearer $graphAccessToken" "https://graph.microsoft.com/v1.0"
+graphAccessToken=$(az account get-access-token --resource https://graph.microsoft.com/ -o tsv --query accessToken)
+echo $graphAccessToken
+curl -s -H "Authorization: Bearer $graphAccessToken" "https://graph.microsoft.com/v1.0"
+curl -s -H "Authorization: Bearer $graphAccessToken" "https://graph.microsoft.com/v1.0/users"
 
 # Exit az-cli container
 exit

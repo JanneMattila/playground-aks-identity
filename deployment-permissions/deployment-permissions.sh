@@ -330,15 +330,18 @@ az role assignment create \
   --scope $aksid
 
 # Download kubelogin from GitHub Releases
-download=$(curl -sL https://api.github.com/repos/Azure/kubelogin/releases/latest | jq -r '.assets[].browser_download_url' | grep linux-amd64)
-wget $download -O kubelogin.zip
-unzip -j kubelogin.zip 
+# download=$(curl -sL https://api.github.com/repos/Azure/kubelogin/releases/latest | jq -r '.assets[].browser_download_url' | grep linux-amd64)
+# wget $download -O kubelogin.zip
+# unzip -j kubelogin.zip
+# => No need to manually update since you can use:
+# sudo az aks install-cli
+# to install also kubelogin.
 
-./kubelogin convert-kubeconfig -l azurecli
+kubelogin convert-kubeconfig -l azurecli
 
 kubectl get nodes
 
-./kubelogin remove-tokens
+kubelogin remove-tokens
 
 # Wipe out the resources
 # Note: You must re-login with platform team credentials!
