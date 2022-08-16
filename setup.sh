@@ -664,6 +664,67 @@ az keyvault secret set --name "secretvar2" --value "Updated value!" --vault-name
 
 #endregion
 
+#############################################################################
+#  ____                  _          ____       _            _             _ 
+# / ___|  ___ _ ____   _(_) ___ ___|  _ \ _ __(_)_ __   ___(_)_ __   __ _| |
+# \___ \ / _ \ '__\ \ / / |/ __/ _ \ |_) | '__| | '_ \ / __| | '_ \ / _` | |
+#  ___) |  __/ |   \ V /| | (_|  __/  __/| |  | | | | | (__| | |_) | (_| | |
+# |____/ \___|_|    \_/ |_|\___\___|_|   |_|  |_|_| |_|\___|_| .__/ \__,_|_|
+# demo                                                       |_|            
+#############################################################################
+#region ServicePrincipal demos
+
+servicePrincipal="myaks-demo-spn-deployment"
+
+# Create service principal
+spnClientSecret=$(az ad sp create-for-rbac -n $servicePrincipal --query password -o tsv)
+spnJson=$(az ad sp list --display-name $servicePrincipal --query [] -o json)
+spnClientId=$(echo $spnJson | jq -r .[].appId)
+spnObjectId=$(echo $spnJson | jq -r .[].id)
+echo $spnClientId
+echo $spnObjectId
+echo $spnClientSecret
+
+aksid=$(az aks show -g $resourceGroupName -n $aksName --query id -o tsv)
+
+# Grant access to fetch kubeconfig for cluserUser role
+# https://docs.microsoft.com/en-us/azure/aks/control-kubeconfig-access#available-cluster-roles-permissions
+az role assignment create \
+  --role "Azure Kubernetes Service Cluster User Role" \
+  --assignee $spnObjectId \
+  --scope $aksid
+
+# Grant write access to AKS
+# https://docs.microsoft.com/en-us/azure/aks/manage-azure-rbac#create-role-assignments-for-users-to-access-cluster
+az role assignment create \
+  --role "Azure Kubernetes Service RBAC Writer" \
+  --assignee $spnObjectId \
+  --scope "$aksid"
+# Remember you can limit it to namespace e.g., "$aksid/namespaces/team1-ns"
+
+tenantId=$(az account show -s $subscriptionName --query tenantId -o tsv)
+echo $tenantId
+
+az login \
+  --service-principal \
+  -u $spnClientId \
+  -p $spnClientSecret \
+  --tenant $tenantId
+
+kubelogin convert-kubeconfig -l azurecli
+
+kubectl get nodes
+kubectl create ns spn-ns
+kubectl auth can-i get pods -n kube-system
+
+kubelogin remove-tokens
+az logout
+
+az login -o table
+az ad sp delete --id $spnClientId
+
+#endregion
+
 # Wipe out the resources
 az group delete --name $resourceGroupName -y
 az keyvault purge --name $keyvaultName # Otherwise it will be in "Deleted vaults" but name is reserved

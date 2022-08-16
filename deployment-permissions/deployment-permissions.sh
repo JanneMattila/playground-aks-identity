@@ -138,18 +138,18 @@ az provider register --namespace Microsoft.ContainerService
 # az extension remove --name aks-preview
 
 # Create service principal for App team
-clientSecret=$(az ad sp create-for-rbac --skip-assignment -n $deploymentServicePrincipal -o table --query password -o tsv)
-clientId=$(az ad sp list --display-name $deploymentServicePrincipal -o table --query [].appId -o tsv)
+clientSecret=$(az ad sp create-for-rbac -n $deploymentServicePrincipal --query password -o tsv)
+clientId=$(az ad sp list --display-name $deploymentServicePrincipal --query [].appId -o tsv)
 echo $clientId
-objectId=$(az ad sp list --display-name $deploymentServicePrincipal -o table --query [].objectId -o tsv)
+objectId=$(az ad sp list --display-name $deploymentServicePrincipal --query [].id -o tsv)
 echo $objectId
 
 # Create resource group for App team
-resourceGroupId=$(az group create -l $location -n $resourceGroupName -o table --query id -o tsv)
+resourceGroupId=$(az group create -l $location -n $resourceGroupName --query id -o tsv)
 echo $resourceGroupId
 
 # Create resource group for our Virtual network
-vnetResourceGroupId=$(az group create -l $location -n $vnetResourceGroupName -o table --query id -o tsv)
+vnetResourceGroupId=$(az group create -l $location -n $vnetResourceGroupName --query id -o tsv)
 echo $vnetResourceGroupId
 
 # Assign "Contributor" role to service principal into the resource group
