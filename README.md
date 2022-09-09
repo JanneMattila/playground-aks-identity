@@ -119,6 +119,15 @@ az role assignment create \
 More information about [Azure RBAC](https://docs.microsoft.com/en-us/azure/aks/concepts-identity#azure-rbac-for-kubernetes-authorization)
 and [built-in roles](https://docs.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#azure-kubernetes-service-cluster-admin-role).
 
+#### Kubernetes RBAC
+
+In case you want to have finer grained RBAC than Azure RBAC,
+then you can use [Kubernetes RBAC](https://docs.microsoft.com/en-us/azure/aks/concepts-identity#kubernetes-rbac)
+which enables you to use very fine grained accesses defined using Kubernetes
+roles. 
+
+See example [here](https://docs.microsoft.com/en-us/azure/aks/azure-ad-rbac).
+
 ### Azure AD based authentication for user applications
 
 You can protect your applications using Azure AD authentication as well.
