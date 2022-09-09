@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Enable auto export
 set -a
 
