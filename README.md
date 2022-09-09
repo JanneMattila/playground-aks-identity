@@ -18,7 +18,7 @@ This repository contains identity related examples.
 
 ## Identity scenarios
 
-### Get cluster management access
+### Cluster management accesses
 
 #### Enable Azure AD integration
 
@@ -45,7 +45,7 @@ az aks get-credentials \
   -g $resource_group_name
 ```
 
-Above requires `AAzure Kubernetes Service Cluster User Role` role assignment to your AKS resource.
+Above requires `Azure Kubernetes Service Cluster User Role` role assignment to your AKS resource.
 
 You can use [kubelogin](https://github.com/Azure/kubelogin) and use
 Azure CLI access token to log in:
@@ -87,7 +87,7 @@ More information about [cluster role permissions](https://docs.microsoft.com/en-
 
 #### Azure RBAC
 
-For enabling Azure Role-Base Access Control (RBAC) based
+For enabling Azure Role-Based Access Control (RBAC) based
 authorization for you cluster resources, you can use following command:
 
 ```bash
@@ -118,6 +118,22 @@ az role assignment create \
 
 More information about [Azure RBAC](https://docs.microsoft.com/en-us/azure/aks/concepts-identity#azure-rbac-for-kubernetes-authorization)
 and [built-in roles](https://docs.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#azure-kubernetes-service-cluster-admin-role).
+
+### Azure AD based authentication for user applications
+
+You can protect your applications using Azure AD authentication as well.
+
+Here is one example: [Cluster with Azure AD Auth](https://github.com/JanneMattila/k8s-cluster#cluster-with-azure-ad-auth)
+
+### Workload Identity
+
+If you need our container to access external resources
+e.g., Azure SQL database using Azure AD managed identities,
+then you can use [Azure AD Workload Identity](https://github.com/Azure/azure-workload-identity) for that.
+
+See [OIDC Issuer & Azure AD Workload Identity](./setup.sh)
+for more detailed example about that. For older POD Identity
+based example see [Azure CLI Automation demo](./setup.sh).
 
 ## Other scenarios
 
