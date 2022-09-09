@@ -128,6 +128,16 @@ roles.
 
 See example [here](https://docs.microsoft.com/en-us/azure/aks/azure-ad-rbac).
 
+#### Just-in time (JIT) access
+
+You don't need to have standing access to cluster since
+you can leverage [Just-in time](https://docs.microsoft.com/en-us/azure/aks/managed-aad#configure-just-in-time-cluster-access-with-azure-ad-and-aks)
+access with your AKS for granting temporarily access to your cluster.
+
+#### Summary of cluster management accesses
+
+More information [here](https://docs.microsoft.com/en-us/azure/aks/concepts-identity#summary).
+
 ### Azure AD based authentication for user applications
 
 You can protect your applications using Azure AD authentication as well.
