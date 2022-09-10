@@ -128,6 +128,20 @@ roles.
 
 See example [here](https://docs.microsoft.com/en-us/azure/aks/azure-ad-rbac).
 
+### Disable local accounts
+
+More information about [disable local accounts](https://docs.microsoft.com/en-us/azure/aks/managed-aad#disable-local-accounts).
+
+> On clusters with **Azure AD integration enabled**, users belonging to
+> a group specified by `aad-admin-group-object-ids` will still be able to
+> gain access via **non-admin credentials**. 
+
+```bash
+az aks create \
+  # ...
+  --disable-local-accounts 
+```` 
+
 #### Just-in time (JIT) access
 
 You don't need to have standing access to cluster since
