@@ -60,7 +60,8 @@ kubelogin convert-kubeconfig -l azurecli
 
 --- 
 
-Alternative, you can also get `clusterAdmin` access to the cluster, although not recommended.
+Alternative, you can also get `clusterAdmin` access to the cluster, although not recommended
+**AND if you have [disabled local accounts](#disable-local-accounts) it would not even work**.
 
 **Two important notes** about `clusterAdmin` access ([link](https://docs.microsoft.com/en-us/azure/aks/managed-aad#troubleshooting-access-issues-with-azure-ad) and [link](https://docs.microsoft.com/en-us/azure/aks/concepts-identity#summary)):
 
@@ -128,7 +129,7 @@ roles.
 
 See example [here](https://docs.microsoft.com/en-us/azure/aks/azure-ad-rbac).
 
-### Disable local accounts
+#### Disable local accounts
 
 More information about [disable local accounts](https://docs.microsoft.com/en-us/azure/aks/managed-aad#disable-local-accounts).
 
@@ -139,8 +140,103 @@ More information about [disable local accounts](https://docs.microsoft.com/en-us
 ```bash
 az aks create \
   # ...
-  --disable-local-accounts 
+  --disable-local-accounts
 ```` 
+
+If you try to use `--admin` after you have disabled local accounts:
+
+```bash
+az aks get-credentials \
+  -n $aks_name \
+  -g $resource_group_name \
+  --admin
+```
+
+You'll get following error message:
+
+```bash
+Code: BadRequest
+Message: Getting static credential is not allowed because this cluster is set to disable local accounts.
+```
+
+#### How Azure AD integration works in `~/kube/config`?
+
+If you have _not enabled Azure AD integration_, then you
+have certificate based configs in `~/kube/config`:
+
+```yaml
+# ...
+- name: clusterUser_rg-myaksidentity_myaksidentity
+  user:
+    client-certificate-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FU...
+    client-key-data: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVkt...
+    token: 52a4345ffbb85fc3e53e918c785675394c69d75cd6a235...
+```
+
+Same applies even if you use `az aks get-credentials --admin ...`:
+
+```yaml
+# ...
+- name: clusterAdmin_rg-myaksidentity_myaksidentity
+  user:
+    client-certificate-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FU...
+    client-key-data: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVkt...
+    token: fa872c341614a6b8f8cc069082aa54967dd071293e77cd...
+```
+
+If you enable Azure AD integration, you'll get following config
+after executing `az aks get-credentials`:
+
+```yaml
+# ...
+- name: clusterUser_rg-myaksidentity_myaksidentity
+  user:
+    auth-provider:
+      config:
+        apiserver-id: 6dae42f8-4368-4678-94ff-3960...
+        client-id: 80faf920-1908-4b52-b5ef-a8e7bed...
+        config-mode: '1'
+        environment: AzurePublicCloud
+        tenant-id: ...
+      name: azure
+```
+
+If you then try to run `kubectl get nodes`, then following warning is
+trying to hint you to start using `kubelogin`:
+
+```bash
+W0912 10:24:34.349376 7896 azure.go:92] WARNING: the azure auth plugin is deprecated in v1.22+,
+unavailable in v1.25+; use https://github.com/Azure/kubelogin instead.
+To learn more, consult https://kubernetes.io/docs/reference/access-authn-authz/authentication/#client-go-credential-plugins
+To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code CA4G82MAM to authenticate.
+```
+
+If you now `kubelogin` to use Azure CLI access token to log in:
+
+```bash
+kubelogin convert-kubeconfig -l azurecli
+```
+
+Your kube config would be changed to this:
+
+```yaml
+# ...
+- name: clusterUser_rg-myaksidentity_myaksidentity
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      args:
+      - get-token
+      - --login
+      - azurecli
+      - --server-id
+      - 6dae42f8-4368-4678-94ff-3960e28e3630
+      command: kubelogin
+      env: null
+      provideClusterInfo: false
+```
+
+And now `kubectl get nodes` would work normally.
 
 #### Just-in time (JIT) access
 
