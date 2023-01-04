@@ -2,8 +2,8 @@
 set -a
 
 # All the variables for the deployment
-subscriptionName="AzureDev"
-aadAdminGroupContains="janne''s"
+subscriptionName="development"
+aadAdminGroupContains="janneops"
 
 aksName="myaksidentity"
 acrName="myacridentity0000010"
@@ -14,10 +14,10 @@ subnetAks="AksSubnet"
 clusterIdentityName="myaksclusteridentity"
 kubeletIdentityName="myakskubeletidentity"
 resourceGroupName="rg-myaksidentity"
-location="westeurope"
+location="westcentralus"
 
 # Login and set correct context
-az login -o table
+az login -o none
 az account set --subscription $subscriptionName -o table
 
 # Prepare extensions and providers
@@ -25,10 +25,12 @@ az extension add --upgrade --yes --name aks-preview
 
 # Enable features
 az feature register --namespace "Microsoft.ContainerService" --name "EnableOIDCIssuerPreview"
+az feature register --namespace "Microsoft.ContainerService" --name "EnableWorkloadIdentityPreview"
 az feature register --namespace "Microsoft.ContainerService" --name "EnablePodIdentityPreview"
 az feature register --namespace "Microsoft.ContainerService" --name "AKS-ScaleDownModePreview"
 az feature register --namespace "Microsoft.ContainerService" --name "PodSubnetPreview"
 az feature list -o table --query "[?contains(name, 'Microsoft.ContainerService/EnableOIDCIssuerPreview')].{Name:name,State:properties.state}"
+az feature list -o table --query "[?contains(name, 'Microsoft.ContainerService/EnableWorkloadIdentityPreview')].{Name:name,State:properties.state}"
 az feature list -o table --query "[?contains(name, 'Microsoft.ContainerService/EnablePodIdentityPreview')].{Name:name,State:properties.state}"
 az feature list -o table --query "[?contains(name, 'Microsoft.ContainerService/AKS-ScaleDownModePreview')].{Name:name,State:properties.state}"
 az feature list -o table --query "[?contains(name, 'Microsoft.ContainerService/PodSubnetPreview')].{Name:name,State:properties.state}"
@@ -91,18 +93,20 @@ echo $myip
 #  --enable-private-cluster
 #  --private-dns-zone None
 
+# Note: If you need to use "aad-pod-identity", then add following to the command:
+# --enable-pod-identity \
+ 
 az aks create -g $resourceGroupName -n $aksName \
  --max-pods 50 --network-plugin azure \
  --node-count 1 --enable-cluster-autoscaler --min-count 1 --max-count 2 \
  --node-osdisk-type "Ephemeral" \
  --node-vm-size "Standard_D8ds_v4" \
- --kubernetes-version 1.23.8 \
+ --kubernetes-version 1.24.6 \
  --enable-addons monitoring,azure-keyvault-secrets-provider \
  --enable-aad \
  --enable-azure-rbac \
- --enable-pod-identity \
  --disable-local-accounts \
- --enable-oidc-issuer \
+ --enable-oidc-issuer --enable-workload-identity \
  --aad-admin-group-object-ids $aadAdmingGroup \
  --workspace-resource-id $workspaceid \
  --attach-acr $acrid \
@@ -127,11 +131,11 @@ az aks get-credentials -n $aksName -g $resourceGroupName --overwrite-existing
 kubelogin convert-kubeconfig -l azurecli
 
 # If using "--enable-azure-rbac" and you need to grant more access rights:
-aksid=$(az aks show -g $resourceGroupName -n $aksName --query id -o tsv)
-az role assignment create \
-  --role "Azure Kubernetes Service RBAC Cluster Admin" \
-  --assignee $aadAdmingGroup \
-  --scope $aksid
+# aksid=$(az aks show -g $resourceGroupName -n $aksName --query id -o tsv)
+# az role assignment create \
+#   --role "Azure Kubernetes Service RBAC Cluster Admin" \
+#   --assignee $aadAdmingGroup \
+#   --scope $aksid
 
 kubectl get nodes
 
@@ -165,8 +169,8 @@ curl $ingressip
 
 # If you now test this you won't get "access_token"
 BODY=$(echo "HTTP GET ""http://169.254.169.254/metadata/identity/oauth2/token?api-version=2021-02-01&resource=https://management.azure.com/"" ""Metadata=true""")
-curl -X POST --data "$BODY" -H "Content-Type: text/plain" "http://$ingressip/api/commands"
-# -> NotFound Not Found no azure identity found for request clientID 
+curl -X POST --data "$BODY" "http://$ingressip/api/commands"
+# -> BadRequest Bad Request {"error":"invalid_request","error_description":"Required metadata header not specified"}
 
 # Create identity to our "webapp-network-tester-demo"
 webappidentityid=$(az identity create --name $aksName-webapp --resource-group $resourceGroupName --query id -o tsv)
@@ -350,12 +354,12 @@ tenantId=$(az account show -s $subscriptionName --query tenantId -o tsv)
 echo $tenantId
 
 # Install Azure AD Workload Identity Mutating Admission Webhook
-helm repo add azure-workload-identity https://azure.github.io/azure-workload-identity/charts
-helm repo update
-helm install workload-identity-webhook azure-workload-identity/workload-identity-webhook \
-   --namespace azure-workload-identity-system \
-   --create-namespace \
-   --set azureTenantID="${tenantId}"
+# helm repo add azure-workload-identity https://azure.github.io/azure-workload-identity/charts
+# helm repo update
+# helm install workload-identity-webhook azure-workload-identity/workload-identity-webhook \
+#    --namespace azure-workload-identity-system \
+#    --create-namespace \
+#    --set azureTenantID="${tenantId}"
 
 # Download azwi from GitHub Releases
 download=$(curl -sL https://api.github.com/repos/Azure/azure-workload-identity/releases/latest | jq -r '.assets[].browser_download_url' | grep linux-amd64)
@@ -371,25 +375,51 @@ echo $azwiAppName
 azwiServiceAccount="azwi-sa"
 azwiNamespace="azwi-demo"
 
+# Create identity to our "azwi"
+azwiidentityid=$(az identity create --name $azwiAppName --resource-group $resourceGroupName --query id -o tsv)
+aszwiclientid=$(az identity show --name $azwiAppName --resource-group $resourceGroupName --query clientId -o tsv)
+echo $azwiidentityid
+echo $aszwiclientid
+
 # Create an AAD application and grant permissions to access the secret
-./azwi serviceaccount create phase app --aad-application-name "$azwiAppName"
+# ./azwi serviceaccount create phase app --aad-application-name "$azwiAppName"
 
 # Create a Kubernetes service account
 kubectl create ns $azwiNamespace
-./azwi serviceaccount create phase sa \
-  --aad-application-name "$azwiAppName" \
-  --service-account-namespace "$azwiNamespace" \
-  --service-account-name "$azwiServiceAccount"
+# ./azwi serviceaccount create phase sa \
+#   --aad-application-name "$azwiAppName" \
+#   --service-account-namespace "$azwiNamespace" \
+#   --service-account-name "$azwiServiceAccount"
 
 # Check namespace content
 kubectl get serviceaccount -n $azwiNamespace
 
 # Establish federated identity credential between the AAD application and the service account issuer & subject
-./azwi serviceaccount create phase federated-identity \
-  --aad-application-name "$azwiAppName" \
-  --service-account-namespace "$azwiNamespace" \
-  --service-account-name "$azwiServiceAccount" \
-  --service-account-issuer-url "$issuerUrl"
+# ./azwi serviceaccount create phase federated-identity \
+#   --aad-application-name "$azwiAppName" \
+#   --service-account-namespace "$azwiNamespace" \
+#   --service-account-name "$azwiServiceAccount" \
+#   --service-account-issuer-url "$issuerUrl"
+
+# Deploy service account
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    azure.workload.identity/client-id: "${aszwiclientid}"
+  labels:
+    azure.workload.identity/use: "true"
+  name: "${azwiServiceAccount}"
+  namespace: "${azwiNamespace}"
+EOF
+
+az identity federated-credential create \
+  --name "federatedidentity" \
+  --identity-name "${azwiAppName}" \
+  --resource-group "${resourceGroupName}" \
+  --issuer "${issuerUrl}" \
+  --subject system:serviceaccount:"${azwiNamespace}":"${azwiServiceAccount}"
 
 # Deploy workload
 cat <<EOF | kubectl apply -f -
@@ -401,7 +431,7 @@ metadata:
 spec:
   serviceAccountName: ${azwiServiceAccount}
   containers:
-    - image: mcr.microsoft.com/azure-cli:2.35.0
+    - image: mcr.microsoft.com/azure-cli:2.43.0
       name: oidc
       command: ["/bin/sh"]
       args: ["-c", "while true; do echo Waiting; sleep 10;done"]
@@ -431,7 +461,7 @@ cat $AZURE_FEDERATED_TOKEN_FILE
 #   ],
 #   "exp": 1651580447,
 #   "iat": 1651576847,
-#   "iss": "https://oidc.prod-aks.azure.com/291168e9-1ded-42d8-8608-c9ff8fe7c21b/",
+#   "iss": "https://westcentralus.oic.prod-aks.azure.com/291168e9-1ded-42d8-8608-c9ff8fe7c21b/b1c51908-621d-4f2c-aa96-36765db11ed6/",
 #   "kubernetes.io": {
 #     "namespace": "azwi-demo",
 #     "pod": {
@@ -456,8 +486,9 @@ az login --allow-no-subscriptions --service-principal -u $AZURE_CLIENT_ID -t $AZ
 # Continue automations based on granted access rights etc.
 graphAccessToken=$(az account get-access-token --resource https://graph.microsoft.com/ -o tsv --query accessToken)
 echo $graphAccessToken
-curl -s -H "Authorization: Bearer $graphAccessToken" "https://graph.microsoft.com/v1.0"
-curl -s -H "Authorization: Bearer $graphAccessToken" "https://graph.microsoft.com/v1.0/users"
+curl -s -H "Authorization: Bearer $graphAccessToken" "https://graph.microsoft.com/v1.0" | jq .
+curl -s -H "Authorization: Bearer $graphAccessToken" "https://graph.microsoft.com/v1.0/users" | jq .
+curl -s -H "Authorization: Bearer $graphAccessToken" "https://graph.microsoft.com/v1.0/users/me" | jq .
 
 # Exit az-cli container
 exit
@@ -466,11 +497,11 @@ exit
 kubectl delete pod az-cli -n "$azwiNamespace"
 kubectl delete sa "$azwiServiceAccount" --namespace "$azwiNamespace"
 
-azwiClientId="$(az ad sp list --display-name "$azwiAppName" --query '[0].appId' -otsv)"
-echo $azwiClientId
+# azwiClientId="$(az ad sp list --display-name "$azwiAppName" --query '[0].appId' -otsv)"
+# echo $azwiClientId
 
 # Remove Azure AD app
-az ad sp delete --id "$azwiClientId"
+# az ad sp delete --id "$azwiClientId"
 #endregion
 
 #####################################
